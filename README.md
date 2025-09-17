@@ -4,3 +4,4 @@ Our last run-oriented build project ： https://github.com/ElementForever2022/Re
 
 Contact: QQ1842710211
 
+Hardware environment setup document：https://mcneznd3g628.feishu.cn/wiki/CK2owvomviE1hekPocAcPrHtnsg
