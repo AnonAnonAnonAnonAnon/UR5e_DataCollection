@@ -8,3 +8,5 @@ pip install pyserial
 检查和机械臂的网络连接: ping 192.168.0.3
 远程控制
 （TODO）遗留问题：sudo
+
+TODO：跑通相机，规划实现（from draft&feishu）
