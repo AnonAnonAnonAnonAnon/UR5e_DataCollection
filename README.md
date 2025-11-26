@@ -44,6 +44,8 @@ sudo apt install -y \
 realsense-viewer
 ```
 
+25.04比较麻烦，不过多跑几行指令就行
+
 ### (3)相机画面获取
 
 ```bash
