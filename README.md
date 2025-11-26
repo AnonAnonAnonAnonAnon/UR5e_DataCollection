@@ -7,8 +7,6 @@ pc：ur 右边， zw 账户
 
 ### （1）机械臂基本控制
 
-ur5e_test_mini_clean.py
-
 最简单的UR5e控制脚本，仅手臂，不含夹爪
 
 ```bash
@@ -18,10 +16,13 @@ pip install pyserial
 
 检查和机械臂的网络连接: ping 192.168.0.3
 
-远程控制
+polyscope切换远程控制
 
+```bash
+python ur5e_test_mini_clean.py
+```
 
-### （2）相关组件安装相机（realsense-viewer）
+### （2）相机相关组件安装（realsense-viewer）
 
 ```bash
 sudo apt update
@@ -52,8 +53,9 @@ realsense-viewer
 pip install pyrealsense2
 ```
 
+```bash
 realsense_test.py
-
+```
 
 ### TODO
 
