@@ -65,7 +65,8 @@ realsense_test.py
 
 ai插件更新
 
-规划实现（from draft&feishu）
+规划实现
+https://mcneznd3g628.feishu.cn/wiki/ITixw3WjMiX4fakEbEPchoMtnXc?from=from_copylink
 
 考古sy实现api
 
