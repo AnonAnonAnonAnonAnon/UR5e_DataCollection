@@ -63,6 +63,8 @@ realsense_test.py
 
 训练; 核桃gpu
 
+ai插件更新
+
 规划实现（from draft&feishu）
 
 考古sy实现api
