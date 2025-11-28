@@ -133,9 +133,7 @@ python collect_data_action_camera.py
 
 ### TODO
 
-收集动作和视频：一个脚本实现联合收集
-
-转hdf5
+数据转hdf5
 
 训练; 核桃gpu
 
