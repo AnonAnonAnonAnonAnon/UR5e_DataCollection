@@ -1,0 +1,11 @@
+{
+  "run_start_time": "2025-11-28T20:07:30.918484",
+  "folder_name": "cam_20251128_200730",
+  "save_hz": 1.0,
+  "color_resolution": [
+    640,
+    480
+  ],
+  "color_fps": 30,
+  "notes": "RealSense color stream; images saved at SAVE_HZ."
+}

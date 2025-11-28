@@ -1,12 +1,14 @@
 Real World UR5e Data Collection   
 
+This records the entire process of building the system from the ground up, including all environments and fine-grained subfunctions.
+
 PC: right UR, zw account
 
 The system has been reinstalled to Ubuntu 25.04, and all packages need to be set up again.
 
 Conda environment based on RoboTwin 2.0 environment
 
-### (1) UR5e Basic Control 
+### (1) UR5e Connection and Basic Control 
 
 The simplest UR5e control script, only the robotic arm, without the gripper
 
@@ -23,7 +25,7 @@ Switch Polyscope to remote control
 python ur5e_test_mini_clean.py
 ```
 
-### （2）Camera-related component installation (realsense-viewer)
+### （2）Camera-related component installation
 
 ```bash
 sudo apt update
@@ -43,22 +45,32 @@ sudo apt install -y \
   librealsense2-dev \
   librealsense2-gl \
   librealsense2-udev-rules
-realsense-viewer
 ```
 
 Ubuntu 25.04 is a bit troublesome, but running a few more commands will do.
 
-### (3) Camera feed acquisition
+Use Intel's app to view the camera: 
+
+```bash
+realsense-viewer
+```
+
+### (3) Camera feed acquisition using python
 
 ```bash
 pip install pyrealsense2
 ```
+Display color image in real time
+
+Press s to take a screenshot
+
+Press q to quit
 
 ```bash
 realsense_test.py
 ```
 
-### (4) RTDE
+### (4) RTDE install
 
 RTDE Project: 
 https://github.com/UniversalRobots/RTDE_Python_Client_Library
@@ -81,14 +93,49 @@ Servoj_RTDE_UR5 Project: Provides smoother control
 Download Folder: 
 https://github.com/danielstankw/Servoj_RTDE_UR5
 
-Output the current TCP pose every second: 
+RTDE basic test: output TCP pose per second:
+
 ```bash
 python rtde_init_test.py
 ```
 
+### (5) Collect action and camera data separately
+
+Collect action data using RTDE.
+
+Record the TCP pose of the robotic arm and save it:
+
+```bash
+python rtde_collect_2_csv.py
+```
+
+Collect camera data.
+
+Basic implementation that saves images to a folder at a certain frequency:
+
+```bash
+python realsense_collect_2_folder.py
+```
+
+### (6) Simultaneous collect action and camera data 
+
+Encapsulated the functions of rtde_collect_2_csv.py and realsense_collect_2_folder.py into functions
+
+realsense_collect_2_folder_func.py
+
+rtde_collect_2_csv_func.py
+
+Call the encapsulated function to simultaneously collect action data and camera footage at a fixed frequency:
+
+```bash
+python collect_data_action_camera.py
+```
+
 ### TODO
 
-收集，转hdf5
+收集动作和视频：一个脚本实现联合收集
+
+转hdf5
 
 训练; 核桃gpu
 
