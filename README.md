@@ -4,6 +4,7 @@ pc：ur 右边， zw 账户
 
 系统重装为25.04，所有轮子重新配
 
+conda 环境基于RoboTwin 2.0环境
 
 ### （1）机械臂基本控制
 
@@ -47,7 +48,7 @@ realsense-viewer
 
 25.04比较麻烦，不过多跑几行指令就行
 
-### (3)相机画面获取
+### (3) 相机画面获取
 
 ```bash
 pip install pyrealsense2
@@ -55,6 +56,34 @@ pip install pyrealsense2
 
 ```bash
 realsense_test.py
+```
+
+### (4) RTDE
+
+RTDE Project: 
+https://github.com/UniversalRobots/RTDE_Python_Client_Library
+
+Download zip: 
+https://github.com/UniversalRobots/RTDE_Python_Client_Library/releases
+
+```bash
+pip install wheel
+pip install rtde-2.7.12-release.zip
+```
+
+```bash
+pip install numpy
+pip install matplotlib
+```
+
+Servoj_RTDE_UR5 Project: Provides smoother control
+
+Download Folder: 
+https://github.com/danielstankw/Servoj_RTDE_UR5
+
+Output the current TCP pose every second: 
+```bash
+python rtde_init_test.py
 ```
 
 ### TODO
