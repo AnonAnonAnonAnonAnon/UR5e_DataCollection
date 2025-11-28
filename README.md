@@ -1,29 +1,29 @@
-实机UR5e数据收集   
+Real World UR5e Data Collection   
 
-pc：ur 右边， zw 账户
+PC: right UR, zw account
 
-系统重装为25.04，所有轮子重新配
+The system has been reinstalled to Ubuntu 25.04, and all packages need to be set up again.
 
-conda 环境基于RoboTwin 2.0环境
+Conda environment based on RoboTwin 2.0 environment
 
-### （1）机械臂基本控制
+### (1) UR5e Basic Control 
 
-最简单的UR5e控制脚本，仅手臂，不含夹爪
+The simplest UR5e control script, only the robotic arm, without the gripper
 
 ```bash
 pip install keyboard
 pip install pyserial
 ```
 
-检查和机械臂的网络连接: ping 192.168.0.3
+Check the network connection with the robotic arm: ping 192.168.0.3
 
-polyscope切换远程控制
+Switch Polyscope to remote control
 
 ```bash
 python ur5e_test_mini_clean.py
 ```
 
-### （2）相机相关组件安装（realsense-viewer）
+### （2）Camera-related component installation (realsense-viewer)
 
 ```bash
 sudo apt update
@@ -46,9 +46,9 @@ sudo apt install -y \
 realsense-viewer
 ```
 
-25.04比较麻烦，不过多跑几行指令就行
+Ubuntu 25.04 is a bit troublesome, but running a few more commands will do.
 
-### (3) 相机画面获取
+### (3) Camera feed acquisition
 
 ```bash
 pip install pyrealsense2
