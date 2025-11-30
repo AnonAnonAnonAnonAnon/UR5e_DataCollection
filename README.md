@@ -131,6 +131,27 @@ Call the encapsulated function to simultaneously collect action data and camera 
 python collect_data_action_camera.py
 ```
 
+### (7) Convert to HDF5 format
+
+Get the RoboTwin 2.0 repository as a subfolder using a git submodule:
+
+```bash
+git submodule add https://github.com/RoboTwin-Platform/RoboTwin.git RoboTwin
+git add .gitmodules RoboTwin
+git commit -m "Add RoboTwin 2.0 as submodule"
+```
+
+After having submodules, how to clone this repository:
+
+``` bash
+git clone --recurse-submodules https://github.com/AnonAnonAnonAnonAnon/UR5e_DataCollection.git
+```
+
+
+
+确定数据收集和推理的初始位姿
+
+
 ### TODO
 
 数据转hdf5
