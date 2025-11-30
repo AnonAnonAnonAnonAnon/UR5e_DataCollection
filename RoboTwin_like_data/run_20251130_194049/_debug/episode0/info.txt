@@ -1,0 +1,3 @@
+T_raw_tcp = 12
+T_raw_img = 12
+T_used    = 12

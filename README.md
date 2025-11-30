@@ -133,28 +133,41 @@ python collect_data_action_camera.py
 
 ### (7) Convert to HDF5 format
 
-Get the RoboTwin 2.0 repository as a subfolder using a git submodule:
+Include RoboTwin 2.0 as a subfolder of the project, without git: 
+
+UR5e_DataCollection/RoboTwin
+
+In RoboTwin 2.0, each policy has a script that processes data in HDF5 format into the format required for training that policy. Such as: 
+
+UR5e_DataCollection/RoboTwin/policy/ACT/process_data.py
+
+Determine the initial pose for data collection and reasoning, go home script:
 
 ```bash
-git submodule add https://github.com/RoboTwin-Platform/RoboTwin.git RoboTwin
-git add .gitmodules RoboTwin
-git commit -m "Add RoboTwin 2.0 as submodule"
+go_home.py
 ```
 
-After having submodules, how to clone this repository:
+Convert all existing data in folder to HDF5:
 
-``` bash
-git clone --recurse-submodules https://github.com/AnonAnonAnonAnonAnon/UR5e_DataCollection.git
+```bash
+python convert_2_hdf5_output_log.py
 ```
 
+The converted HDF5, for example:
 
+```bash
+UR5e_DataCollection/RoboTwin_like_data/run_20251130_194629/torch_cube/simple/data/episode0.hdf5
+```
 
-确定数据收集和推理的初始位姿
+View the contents of an HDF5 file: 
 
+```bash
+python preview_hdf5.py /home/zhangw/UR5e_DataCollection/RoboTwin_like_data/run_20251130_194629/torch_cube/simple/data/episode0.hdf5
+```
 
 ### TODO
 
-数据转hdf5
+整理脚本
 
 训练; 核桃gpu
 
