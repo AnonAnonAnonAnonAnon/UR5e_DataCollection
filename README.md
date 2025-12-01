@@ -131,6 +131,8 @@ Call the encapsulated function to simultaneously collect action data and camera 
 python collect_data_action_camera.py
 ```
 
+10hz
+
 ### (7) Convert to HDF5 format
 
 Include RoboTwin 2.0 as a subfolder of the project, without git: 
@@ -165,11 +167,46 @@ View the contents of an HDF5 file:
 python preview_hdf5.py /home/zhangw/UR5e_DataCollection/RoboTwin_like_data/run_20251130_194629/torch_cube/simple/data/episode0.hdf5
 ```
 
+### (8) Convert to ACT format
+
+Modify the data processing script for each strategy, using ACT as an example
+
+```bash
+cd /home/zhangw/UR5e_DataCollection/RoboTwin/policy/ACT
+python process_data_real.py \
+  /home/zhangw/UR5e_DataCollection/RoboTwin_like_data/run_20251201_193912 \
+  torch_cube \
+  simple \
+  3
+```
+
+### (9) Train
+
+Install the ACT-related environment according to the RoboTwin documentation:
+
+```bash
+cd /home/zhangw/UR5e_DataCollection/RoboTwin/policy/ACT
+pip install pyquaternion pyyaml rospkg pexpect mujoco==2.3.7 dm_control==1.0.14 \
+           opencv-python matplotlib einops packaging h5py ipython
+cd detr
+pip install -e .
+cd ..
+```
+
+Start Training:
+
+```bash
+cd /home/zhangw/UR5e_DataCollection/RoboTwin/policy/ACT
+bash train.sh torch_cube simple 3 0 0
+#            ^task_name  ^task_config  ^expert_data_num  ^seed  ^gpu_id
+```
+
+### (10) Inference
+
+
 ### TODO
 
-整理脚本
-
-训练; 核桃gpu
+训练; 核桃gpu？
 
 ai插件更新
 

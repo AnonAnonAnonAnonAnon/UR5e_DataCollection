@@ -77,8 +77,8 @@ def save_episode_hdf5(out_path, tcp, imgs, episode_idx):
     # 2) 简单起见：把 TCP 当作 “right_arm & left_arm”，gripper 全 0
     right_arm = tcp
     left_arm = tcp
-    right_gripper = np.zeros((T, 1), dtype=np.float32)
-    left_gripper = np.zeros((T, 1), dtype=np.float32)
+    right_gripper = np.zeros((T,), dtype=np.float32)
+    left_gripper = np.zeros((T,), dtype=np.float32)
 
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
 

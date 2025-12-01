@@ -25,12 +25,12 @@ def main():
     # 机械臂 / RTDE
     ROBOT_HOST = "192.168.0.3"
     ROBOT_PORT = 30004
-    RTDE_HZ = 1               # RTDE 输出频率，也作为保存频率
+    RTDE_HZ = 10               # RTDE 输出频率，也作为保存频率
     ACTION_DATA_DIR = "/home/zhangw/UR5e_DataCollection/action_data"
 
     # 相机
     CAMERA_BASE_DIR = "/home/zhangw/UR5e_DataCollection/camera_data"
-    CAM_SAVE_HZ = 1.0
+    CAM_SAVE_HZ = 10.0 # 相机频率
     COLOR_WIDTH = 640
     COLOR_HEIGHT = 480
     COLOR_FPS = 30

@@ -1,0 +1,3 @@
+T_raw_tcp = 9
+T_raw_img = 9
+T_used    = 9

@@ -1,0 +1,3 @@
+T_raw_tcp = 73
+T_raw_img = 73
+T_used    = 73

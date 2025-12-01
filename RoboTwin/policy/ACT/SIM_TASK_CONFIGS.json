@@ -1,0 +1,22 @@
+{
+    "sim-torch_cube-simple-6": {
+        "dataset_dir": "./processed_data/sim-torch_cube/simple-6",
+        "num_episodes": 6,
+        "episode_len": 1000,
+        "camera_names": [
+            "cam_high",
+            "cam_right_wrist",
+            "cam_left_wrist"
+        ]
+    },
+    "sim-torch_cube-simple-3": {
+        "dataset_dir": "./processed_data/sim-torch_cube/simple-3",
+        "num_episodes": 3,
+        "episode_len": 1000,
+        "camera_names": [
+            "cam_high",
+            "cam_right_wrist",
+            "cam_left_wrist"
+        ]
+    }
+}
