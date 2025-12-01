@@ -1,0 +1,590 @@
+好，恭喜你已经把 **10Hz 实机数据 → ACT 训练** 跑起来了，这一步非常关键 💪
+现在我们分两件事：
+
+1. 先把 **RoboTwin 原生的仿真评估 eval.sh / eval_policy.py** 讲清楚；
+2. 再给你一套 **“尽量少改代码”的实机推理方案**（不去硬改 eval_policy，那一套是给 SAPIEN 仿真用的）。
+
+---
+
+## 一、RoboTwin 原生仿真评估长什么样？
+
+### 1.1 `eval.sh` 在干嘛？
+
+`policy/ACT/eval.sh`：
+
+```bash
+#!/bin/bash
+
+policy_name=ACT
+task_name=${1}
+task_config=${2}
+ckpt_setting=${3}
+expert_data_num=${4}
+seed=${5}
+gpu_id=${6}
+
+export CUDA_VISIBLE_DEVICES=${gpu_id}
+echo -e "\033[33mgpu id (to use): ${gpu_id}\033[0m"
+
+cd ../..
+
+PYTHONWARNINGS=ignore::UserWarning \
+python script/eval_policy.py --config policy/$policy_name/deploy_policy.yml \
+    --overrides \
+    --task_name ${task_name} \
+    --task_config ${task_config} \
+    --ckpt_setting ${ckpt_setting} \
+    --ckpt_dir policy/ACT/act_ckpt/act-${task_name}/${ckpt_setting}-${expert_data_num} \
+    --seed ${seed} \
+    --temporal_agg true
+```
+
+含义：
+
+* 入口参数：
+
+  * `task_name`：**RoboTwin 里的任务 ID**，比如 `beat_block_hammer`；
+  * `task_config`：评估环境配置（随机化等级、摄像头、背景等），对应 `task_config/*.yml`；
+  * `ckpt_setting`：训练时的数据配置（比如 `demo_clean` / `demo_randomized`），用于确定 ckpt 路径；
+  * `expert_data_num`：训练用的 demo 数目，用于拼 ckpt 目录名；
+  * `seed` / `gpu_id`：随机种子 / GPU 选择。
+* 它最终调用：
+
+```bash
+python script/eval_policy.py \
+  --config policy/ACT/deploy_policy.yml \
+  --overrides \
+  --task_name ... \
+  --task_config ... \
+  --ckpt_setting ... \
+  --ckpt_dir policy/ACT/act_ckpt/act-${task_name}/${ckpt_setting}-${expert_data_num} \
+  --seed ... \
+  --temporal_agg true
+```
+
+* `deploy_policy.yml` 是一个基础配置文件，`--overrides` 后面的键值会覆盖 yaml 里的字段，得到最终的 `usr_args`。
+
+---
+
+### 1.2 `script/eval_policy.py` 的主流程
+
+核心结构：
+
+```python
+if __name__ == "__main__":
+    from test_render import Sapien_TEST
+    Sapien_TEST()
+
+    usr_args = parse_args_and_config()
+    main(usr_args)
+```
+
+#### ① 解析配置
+
+```python
+def parse_args_and_config():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--config", type=str, required=True)
+    parser.add_argument("--overrides", nargs=argparse.REMAINDER)
+    args = parser.parse_args()
+
+    with open(args.config, "r") as f:
+        config = yaml.safe_load(f)
+
+    # 把 "--task_name torch_cube --seed 0 ..." 解析成 dict 覆盖进 config
+    ...
+    return config    # 记作 usr_args
+```
+
+你在 `eval.sh` 里传的 `task_name / task_config / ckpt_dir / seed` 都被塞进了 `usr_args`。
+
+#### ② main(usr_args)：创建仿真环境 + 加载策略
+
+```python
+task_name = usr_args["task_name"]         # 比如 "beat_block_hammer"
+task_config = usr_args["task_config"]     # 比如 "demo_clean"
+ckpt_setting = usr_args["ckpt_setting"]   # 比如 "demo_clean"
+policy_name = usr_args["policy_name"]     # 来自 deploy_policy.yml，指向某个 python 模块
+instruction_type = usr_args["instruction_type"]
+
+get_model = eval_function_decorator(policy_name, "get_model")
+```
+
+* `policy_name` 是一个模块路径，比如 `"policy.ACT.deploy_policy"`（举例），
+  `eval_function_decorator(policy_name, "get_model")` 等价于：
+
+```python
+policy_model = importlib.import_module(policy_name)
+get_model = policy_model.get_model
+```
+
+* 然后读取任务配置 yaml：
+
+```python
+with open(f"./task_config/{task_config}.yml", "r") as f:
+    args = yaml.load(...)
+
+args['task_name'] = task_name
+args["task_config"] = task_config
+args["ckpt_setting"] = ckpt_setting
+```
+
+这个 `task_config.yml` 里定义了：
+
+* domain randomization：桌面杂物、随机背景/光照、相机抖动；
+* camera 类型：`head_camera_type` / `wrist_camera_type`；
+* embodiment：双臂机器人用哪个 URDF、关节名等。
+
+接着：
+
+```python
+embodiment_type = args.get("embodiment")
+_embodiment_config.yml 里找到对应机器人的路径
+ -> left_robot_file / right_robot_file
+ -> 每个机器人的 config.yml 决定 arm 关节维度
+...
+args["left_embodiment_config"] = get_embodiment_config(args["left_robot_file"])
+args["right_embodiment_config"] = get_embodiment_config(args["right_robot_file"])
+usr_args["left_arm_dim"] = len(args["left_embodiment_config"]["arm_joints_name"][0])
+usr_args["right_arm_dim"] = len(args["right_embodiment_config"]["arm_joints_name"][1])
+```
+
+也就是说：**eval_policy.py 在这里完成了“任务 + 机体 + 相机 + 随机化”一整套仿真配置。**
+
+然后创建仿真环境：
+
+```python
+TASK_ENV = class_decorator(args["task_name"])
+# 等价于 envs.<task_name>.<task_name>()
+```
+
+也就是从 `envs/beat_block_hammer.py` 里加载任务类，实例化出一个 SAPIEN 环境。
+
+最后加载策略：
+
+```python
+model = get_model(usr_args)   # 由 policy/ACT/deploy_policy.py 实现
+```
+
+`get_model` 里通常会：
+
+* 读 ckpt 路径；
+* 创建 ACTPolicy；
+* 加载权重；
+* 封装成一个 “RoboTwin 风格”的接口（带 `eval()` / `reset_model()` 等）。
+
+#### ③ eval_policy：在仿真里反复 roll out
+
+```python
+st_seed = 100000 * (1 + seed)
+suc_nums = []
+test_num = 100
+model = get_model(usr_args)
+
+st_seed, suc_num = eval_policy(task_name, TASK_ENV, args, model, st_seed, test_num, ...)
+```
+
+`eval_policy(...)` ：
+
+1. **先用“专家”跑一遍**，确保这一随机种子下的环境是可解的：
+
+   ```python
+   TASK_ENV.setup_demo(now_ep_num=now_id, seed=now_seed, is_test=True, **args)
+   episode_info = TASK_ENV.play_once()    # 专家或规划器跑一遍
+   TASK_ENV.close_env()
+   ```
+
+   如果失败，就换一个 seed，避免评估落在“任务本身不可能”的随机配置上。
+
+2. **生成自然语言指令**：
+
+   ```python
+   episode_info_list = [episode_info["info"]]
+   results = generate_episode_descriptions(args["task_name"], episode_info_list, test_num)
+   instruction = np.random.choice(results[0][instruction_type])
+   TASK_ENV.set_instruction(instruction=instruction)
+   ```
+
+3. **启动视频录制（可选）**：用 ffmpeg 把 env 渲染写成 mp4。
+
+4. **用策略控制环境**：
+
+   ```python
+   eval_func = eval_function_decorator(policy_name, "eval")
+   reset_func = eval_function_decorator(policy_name, "reset_model")
+
+   succ = False
+   reset_func(model)
+   while TASK_ENV.take_action_cnt < TASK_ENV.step_lim:
+       observation = TASK_ENV.get_obs()
+       eval_func(TASK_ENV, model, observation)  # 里面会调用 ACT / OpenVLA 等产生命令并 env.step()
+       if TASK_ENV.eval_success:
+           succ = True
+           break
+   ```
+
+5. 统计成功次数、写 `_result.txt`、保存视频和日志到：
+
+   ```text
+   eval_result/{task_name}/{policy_name}/{task_config}/{ckpt_setting}/{timestamp}/
+   ```
+
+> 总结：
+> `eval.sh + eval_policy.py` 是 **“RoboTwin 通用仿真评估框架”**，
+> 把：环境 randomization + 指令生成 + 视频录制 + 成功率统计 都统一封装了。
+> 它假定你有 `envs.<task_name>` 这一整套 SAPIEN 任务实现。
+
+---
+
+## 二、为什么不直接用这套代码做 UR5 实机？
+
+因为这套 eval pipeline 有几个“强依赖”：
+
+1. 要有 `envs.<task_name>` 这个 **仿真环境类**（基于 SAPIEN）：
+
+   * 提供 `setup_demo() / play_once() / get_obs() / step() / check_success()`；
+   * 渲染图像给 ffmpeg；
+   * 和 RoboTwin 的 randomization / camera 配置耦合得很紧。
+
+2. `eval_func(TASK_ENV, model, observation)` 里假设：
+
+   * `TASK_ENV` 是仿真 env；
+   * 它内部用 SAPIEN 求解动力学，自己调用 `TASK_ENV.step(...)`。
+
+3. `task_config.yml` 中有大量仿真专用参数（背景纹理、光源、table height、camera pose 随机化等），对实机 UR5 完全不适用。
+
+如果你要照着这套框架做实机评估，等于要：
+
+* 写一个 **UR5+RealSense 版的 TASK_ENV**，实现上面所有方法；
+* 写好 `get_obs()` 返回的格式与仿真一致；
+* 在 `eval_func` 里调用 RTDE 发送动作，而不是仿真 env.step。
+
+这反而工程量更大，不符合你现在 “**尽量少改动**” 的目标。
+
+---
+
+## 三、最小改动实现“一次实机推理”的推荐做法
+
+**思路：完全绕开 `eval.sh` & `eval_policy.py`，新写一个小脚本，直接：**
+
+1. 加载你刚训练好的 ACT；
+2. 加载 `dataset_stats.pkl` 做归一化；
+3. 在一个 while 循环里：
+
+   * 从 UR5 RTDE 读当前 TCP pose；
+   * 从 RealSense 读一帧图像；
+   * 拼出和训练同分布的 `(qpos, image)`；
+   * 调 ACT 得到 `action`（14维）；
+   * 把它映射回 “下一步 TCP pose”，发送给 UR5；
+   * 重复 N 步或按键退出。
+
+### 3.1 ckpt 在哪里？
+
+训练时你用的是：
+
+```bash
+bash train.sh torch_cube simple 6 0 0
+```
+
+train.sh 里：
+
+```bash
+--task_name sim-${task_name}-${task_config}-${expert_data_num}
+--ckpt_dir ./act_ckpt/act-${task_name}/${task_config}-${expert_data_num}
+```
+
+所以这次训练的权重和 stats 在：
+
+```text
+policy/ACT/act_ckpt/act-torch_cube/simple-6/
+    ├── policy_best.ckpt
+    ├── policy_last.ckpt
+    ├── policy_epoch_XXXX_seed_0.ckpt
+    └── dataset_stats.pkl
+```
+
+后面我们就用这个目录。
+
+---
+
+### 3.2 新建一个超简化实机推理脚本（建议叫 real_eval_torch_cube.py）
+
+放到：`/home/zhangw/UR5e_DataCollection/RoboTwin/policy/ACT/real_eval_torch_cube.py`
+
+下面是一份**骨架代码**（尽量复用了 ACT 自己的逻辑，没碰 eval_policy.py）：
+
+> ⚠️ 注意：下面关于 **UR5 发送动作** 的部分我用 `# TODO` 标出来了，需要你用自己现有的控制函数填上，以免直接把机械臂撞飞。先用小 step、慢速测试。
+
+```python
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+"""
+用刚刚训练好的 ACT 在 UR5 + RealSense 上做一次简单实机推理（10Hz）
+- 每个循环：
+  1. 读取当前 TCP pose
+  2. 读取相机图像
+  3. 构造 qpos + images 和训练时一致的格式
+  4. 前向 ACT，取第一个 action
+  5. 用 action 的前 6 维作为下一步的 TCP 目标（可以加一个缩放因子）
+"""
+
+import os
+import time
+
+import numpy as np
+import cv2
+import torch
+import pickle
+
+from act_policy import ACTPolicy
+from constants import SIM_TASK_CONFIGS
+
+# 你之前用的数据 key
+TASK_KEY = "sim-torch_cube-simple-6"
+
+# ckpt 目录
+CKPT_DIR = "./act_ckpt/act-torch_cube/simple-6"
+
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+
+# ====== 1. 加载已训练好的 ACT + 归一化统计 ======
+
+def load_act_policy():
+    """
+    返回：
+      policy        : 已经 load_state_dict 并设为 eval() 的 ACTPolicy
+      pre_process   : qpos 归一化函数
+      post_process  : action 反归一化函数
+      camera_names  : 训练时用到的相机列表
+    """
+    task_cfg = SIM_TASK_CONFIGS[TASK_KEY]
+    camera_names = task_cfg["camera_names"]    # ["cam_high", "cam_right_wrist", "cam_left_wrist"]
+
+    # 和 train.sh 一致的超参
+    policy_config = {
+        "lr": 1e-5,
+        "num_queries": 50,      # chunk_size
+        "kl_weight": 10,
+        "hidden_dim": 512,
+        "dim_feedforward": 3200,
+        "lr_backbone": 1e-5,
+        "backbone": "resnet18",
+        "enc_layers": 4,
+        "dec_layers": 7,
+        "nheads": 8,
+        "camera_names": camera_names,
+    }
+
+    policy = ACTPolicy(policy_config)
+    ckpt_path = os.path.join(CKPT_DIR, "policy_best.ckpt")
+    state_dict = torch.load(ckpt_path, map_location=DEVICE)
+    policy.load_state_dict(state_dict)
+    policy.to(DEVICE)
+    policy.eval()
+    print(f"[ACT] Loaded policy from {ckpt_path}")
+
+    # 加载 dataset_stats.pkl
+    stats_path = os.path.join(CKPT_DIR, "dataset_stats.pkl")
+    with open(stats_path, "rb") as f:
+        stats = pickle.load(f)
+    print(f"[ACT] Loaded stats from {stats_path}")
+
+    def pre_process(qpos_np: np.ndarray) -> np.ndarray:
+        return (qpos_np - stats["qpos_mean"]) / stats["qpos_std"]
+
+    def post_process(action_np: np.ndarray) -> np.ndarray:
+        return action_np * stats["action_std"] + stats["action_mean"]
+
+    return policy, pre_process, post_process, camera_names
+
+
+# ====== 2. 构造和训练一致的 qpos + image 格式 ======
+
+def build_qpos_from_tcp(tcp_pose):
+    """
+    tcp_pose: shape (6,), [x, y, z, rx, ry, rz]
+    训练时我们把 tcp 复制到了 left_arm/right_arm，并把两个 gripper 设为 0
+    得到 14 维：
+        [left_arm(6), left_gripper(1), right_arm(6), right_gripper(1)]
+    """
+    tcp_pose = np.asarray(tcp_pose, dtype=np.float32)
+    left_arm = tcp_pose
+    right_arm = tcp_pose
+    left_gripper = np.array([0.0], dtype=np.float32)
+    right_gripper = np.array([0.0], dtype=np.float32)
+    state = np.concatenate([left_arm, left_gripper, right_arm, right_gripper], axis=0)  # (14,)
+    return state
+
+
+def build_image_tensor(color_image, camera_names):
+    """
+    color_image: H x W x 3 (uint8, BGR 或 RGB 都问题不大，这里只是喂给 CNN)
+    为了对齐训练时的 3 路相机，这里粗暴地：把同一张图复制成 N_cam 路
+    输出: torch.Tensor, shape (1, N_cam, 3, H, W)
+    """
+    # 训练时 resize 到 (640,480)，这里也对齐一下
+    img = cv2.resize(color_image, (640, 480))
+    # OpenCV 是 BGR，这里不强制转，影响不大；想严谨可以 cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    img = img.astype(np.float32) / 255.0   # [0,1]
+
+    imgs = []
+    for _ in camera_names:
+        imgs.append(img)   # N_cam 同图
+
+    imgs = np.stack(imgs, axis=0)          # (N_cam, H, W, 3)
+    imgs = np.transpose(imgs, (0, 3, 1, 2))# (N_cam, 3, H, W)
+    imgs = torch.from_numpy(imgs).to(DEVICE).unsqueeze(0)  # (1, N_cam, 3, H, W)
+    return imgs
+
+
+# ====== 3. 和 UR5 / RealSense 打通 ======
+
+def run_real_rollout():
+    # 3.1 加载策略
+    policy, pre_process, post_process, camera_names = load_act_policy()
+
+    # 3.2 建立 RTDE / RealSense 连接（直接复用你已有的函数）
+    from rtde_collect_2_csv_func import connect_rtde
+    from realsense_collect_2_folder_func import start_realsense_pipeline
+
+    ROBOT_HOST = "192.168.0.3"
+    ROBOT_PORT = 30004
+    CTRL_HZ = 10.0         # 推理控制频率，和你采集时一致
+
+    con = connect_rtde(robot_host=ROBOT_HOST, robot_port=ROBOT_PORT, frequency_hz=CTRL_HZ)
+    pipeline = start_realsense_pipeline(width=640, height=480, fps=30)
+
+    print("[REAL] Start ACT control loop, press 'q' in window to stop.")
+
+    try:
+        next_step_time = time.time()
+        step_idx = 0
+
+        while True:
+            # 1) 读当前机器人 TCP pose
+            state = con.receive()
+            if state is None:
+                print("[REAL] RTDE connection closed.")
+                break
+            tcp = np.array(state.actual_TCP_pose, dtype=np.float32)  # (6,)
+
+            # 2) 读当前相机图像
+            frames = pipeline.wait_for_frames()
+            color_frame = frames.get_color_frame()
+            if not color_frame:
+                continue
+            color_image = np.asanyarray(color_frame.get_data())
+            cv2.imshow("RealSense Color (ACT Control)", color_image)
+
+            # 3) 构造 qpos + image tensor
+            qpos = build_qpos_from_tcp(tcp)             # (14,)
+            qpos_norm = pre_process(qpos)               # 归一化
+            qpos_tensor = torch.from_numpy(qpos_norm).float().to(DEVICE).unsqueeze(0)  # (1, 14)
+            image_tensor = build_image_tensor(color_image, camera_names)               # (1, N_cam, 3, H, W)
+
+            # 4) 前向 ACT，取第一个动作（简单版本：每次都重算，只用 a[0]）
+            with torch.no_grad():
+                all_actions = policy(qpos_tensor, image_tensor)
+                # all_actions: (1, num_queries, state_dim)，取第 0 个 time step
+                raw_action = all_actions[:, 0]                  # (1, 14)
+                raw_action = raw_action.squeeze(0).cpu().numpy()# (14,)
+            action = post_process(raw_action)                   # 反归一化 -> 真实关节
+
+            # 5) 把 action 映射回 “下一步 TCP pose”
+            #    这里有很多设计空间，为了安全，先只用一个小步长的 delta
+            target_full = action  # (14,)
+            target_tcp = target_full[:6]  # 只是一个简单的例子
+
+            # 建议剪裁 delta，避免一次走太远
+            delta_tcp = target_tcp - tcp
+            max_step = 0.01  # 每步最多 1cm/0.01rad，自己按需调小
+            step_norm = np.linalg.norm(delta_tcp)
+            if step_norm > max_step:
+                delta_tcp *= max_step / (step_norm + 1e-6)
+            safe_target_tcp = tcp + delta_tcp
+
+            print(f"[STEP {step_idx:04d}] tcp = {tcp}, target = {safe_target_tcp}")
+
+            # TODO: 在这里调用你现有的 UR 控制接口，把 safe_target_tcp 发给 UR5
+            # 比如：moveL_to_tcp(safe_target_tcp, t=0.1) 或 speedL(delta_tcp/dt, a, ...)
+
+            step_idx += 1
+
+            # 限制控制频率为 CTRL_HZ
+            next_step_time += 1.0 / CTRL_HZ
+            sleep_t = next_step_time - time.time()
+            if sleep_t > 0:
+                time.sleep(sleep_t)
+
+            # 按 'q' 退出
+            key = cv2.waitKey(1) & 0xFF
+            if key == ord('q'):
+                print("[REAL] Quit by user.")
+                break
+
+    finally:
+        try:
+            con.send_pause()
+        except Exception:
+            pass
+        con.disconnect()
+        pipeline.stop()
+        cv2.destroyAllWindows()
+        print("[REAL] Rollout finished, connections closed.")
+
+
+if __name__ == "__main__":
+    run_real_rollout()
+```
+
+**特点：**
+
+* 没有改动你现有的训练代码、`eval.sh`、`eval_policy.py`；
+* 新增了一个脚本，逻辑非常直接：
+
+  * 加载 ACT + stats；
+  * RTDE + RealSense 实时采样；
+  * 归一化 → 行为前向 → 反归一化；
+  * 把 action 的前 6 维抽出来作为 TCP 的 delta（加了剪裁保护）；
+  * 你只需要在 `# TODO` 位置接上自己的 UR 控制函数即可。
+
+---
+
+### 3.3 安全建议（一定要注意）
+
+1. **先不动机械臂，先打 log：**
+
+   * 可以先把 `TODO` 的控制部分注释掉，只打印 `delta_tcp`；
+   * 看看模型的输出是不是合理（是否多数时候是小步偏移，而不是乱跳）。
+
+2. **真机测试时：**
+
+   * 开始先把 `max_step` 设得非常小（比如 2~3mm / 0.005rad）；
+   * 把机器人摆在一个没有障碍的高处空中位姿，只看它微调；
+   * 确认不会大幅乱动后，再慢慢增大步长。
+
+3. **一开始可以手动单步执行：**
+
+   * 把 `while True` 改成只 run 1~2 步；
+   * 每步执行完后等你按键继续。
+
+---
+
+## 四、小结
+
+* **仿真评估（eval.sh + eval_policy.py）**：
+  是 RoboTwin 为 SAPIEN 环境设计的一套大而全 pipeline，适合统一评测 50 个 benchmark 任务，不适合直接拿来跑 UR5 实机。
+
+* **实机推理（你现在要的）**：
+  推荐写一个简单的 `real_eval_torch_cube.py`，完全复用 ACT 的 model + stats，只改“环境部分”为：
+
+  > RTDE + RealSense → 构造 qpos/image → ACT → 控制 UR5。
+
+如果你愿意，下一步你可以：
+
+1. 把上面的脚本存成 `real_eval_torch_cube.py`；
+2. 先注释掉控制部分，让它只打印 `tcp` & `safe_target_tcp`；
+3. 运行一次看看输出是不是合理，然后我们再一起讨论如何更优雅地把 action 映射为 UR 指令（比如用 joint space 而不是 TCP、或者引入简单的 MPC 等）。
+
+

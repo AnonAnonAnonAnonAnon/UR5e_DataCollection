@@ -204,7 +204,11 @@ bash train.sh torch_cube simple 3 0 0
 ### (10) Inference
 
 
+
 ### TODO
+
+写简单实机评估脚本
+/home/zhangw/UR5e_DataCollection/12012009_cache_gpt_chat.txt
 
 训练; 核桃gpu？
 
