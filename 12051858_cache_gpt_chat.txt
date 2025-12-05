@@ -1,0 +1,549 @@
+阶段 0：确认表示 & 配置（现在其实已经完成了一半）
+
+目标：把“模型眼里看到的东西”描述清楚，避免后面每一步都猜。
+
+我们已经知道：
+
+实机 qpos 的构造方式：
+
+tcp = state.actual_TCP_pose  # [x, y, z, rx, ry, rz]
+left_arm  = tcp
+right_arm = tcp
+left_g = 0.0
+right_g = 0.0
+qpos = np.concatenate([left_arm, [left_g], right_arm, [right_g]])  # (14,)
+
+
+图像：RealSense 彩色图像，resize 到 (640,480)，转成 (3,H,W) float32，除以 255 变成 [0,1]；
+
+ACT 的 get_action(obs) 期望的 obs 结构是：
+
+obs = {
+    "qpos": qpos_14d,            # numpy, shape (14,)
+    "head_cam": img0_chw_float,
+    "left_cam": img1_chw_float,
+    "right_cam": img2_chw_float,
+}
+
+
+
+（短期如果你只有 1 个相机，就先把同一张图复制成三个键的值。）
+
+你现在做的： 这一步我们算是已经“设计完”，后面只需要照这个约定写代码。
+
+阶段 1：只做“模型加载 + 假数据前向”小脚本
+
+目标： 不连机器人、不连相机，先证明：
+
+ACT 模型能被正常加载；
+
+get_action(obs) 接口能跑通；
+
+输出的 action 形状是 (1,14)，数值不会是 nan/inf。
+
+子功能：
+
+写一个函数：
+
+def load_act_from_ckpt(ckpt_dir) -> ACT:
+    # 构造 args_override, Dummy RoboTwin_Config, 返回 ACT 实例
+
+
+写一个小 main：
+
+policy = load_act_from_ckpt(CKPT_DIR)
+
+dummy_obs = {
+    "qpos": np.zeros(14, dtype=np.float32),
+    "head_cam": np.zeros((3, 480, 640), dtype=np.float32),
+    "left_cam": np.zeros((3, 480, 640), dtype=np.float32),
+    "right_cam": np.zeros((3, 480, 640), dtype=np.float32),
+}
+
+action = policy.get_action(dummy_obs)
+print(action.shape, action)
+
+
+如何验证：
+
+能跑完不报错；
+
+action 是 numpy array，shape 大概 (1,14)，元素是有限数。
+
+这一阶段我们只关心 “ACT 这块砖” 自己没问题。
+
+阶段 2：从一个 HDF5 episode 里重建 obs → 丢给 ACT
+
+目标： 不连真机，但用你已经转好的某个 episode0.hdf5：
+
+读出里面的 joint_action/left_arm 等；
+
+按 process_data_real.py 的那套逻辑，构造真实的 qpos 序列和图像序列；
+
+对其中一帧构造 obs，扔给阶段 1 的 policy.get_action；
+
+确认整个链路完全对齐训练时的分布。
+
+子功能：
+
+写一个小函数：
+
+def load_one_step_from_hdf5(path, t=0):
+    # 返回 qpos_t, image_t_chw, 以及print一些调试信息
+
+
+在 main 里：
+
+policy = load_act_from_ckpt(...)
+qpos, img = load_one_step_from_hdf5(episode_path, t=10)
+
+obs = {
+    "qpos": qpos,
+    "head_cam": img,
+    "left_cam": img,
+    "right_cam": img,
+}
+action = policy.get_action(obs)
+print("qpos:", qpos)
+print("action:", action)
+
+
+如何验证：
+
+整个脚本跑通无错；
+
+qpos 和 action 数值看起来在同一个量级，不会爆到几百几千；
+
+你可以顺手查看这个 episode 的 debug/tcp_used.npy，确认：
+qpos 的前 6 维大致就是那一时刻的 TCP pose。
+
+阶段 1 + 2 做完，你就有了“ACT 在离线数据上的前向测试”，心里会很踏实。
+
+阶段 3：纯线上观测构造（RTDE + RealSense），不碰模型、不动机器人
+
+目标： 连上 UR5e 和 RealSense，只做两件事：
+
+每 0.1 秒读一次 actual_TCP_pose，按我们的约定拼成 qpos；
+
+同时抓一帧 RealSense 彩色图，把它转成 (3,H,W) float32；
+
+实时打印 qpos 的前 6 维、显示图像窗口，确认数据质量。
+
+子功能：
+
+用你现有的 rtde_collect_2_csv_func.py / rtde_init_test.py，抽出一个：
+
+def get_current_tcp_from_rtde(con) -> np.ndarray:  # shape (6,)
+
+
+用你现有的 realsense_collect_2_folder_func.py，抽出一个：
+
+def get_current_color_frame(pipeline) -> np.ndarray:  # HxWx3 uint8
+
+
+写一个小脚本：
+
+while True:
+    tcp = get_current_tcp_from_rtde(...)
+    color = get_current_color_frame(...)
+    qpos = build_qpos_from_tcp(tcp)   # 14 维
+    img_chw = preprocess_image(color) # 3xHxW float32
+
+    print("tcp:", tcp)
+    cv2.imshow("color", color)
+    if cv2.waitKey(1) == ord('q'):
+        break
+
+
+如何验证：
+
+每秒打印的 tcp 连续、稳定；
+
+图像窗口显示正常；
+
+不 crash，不丢帧到离谱。
+
+阶段 3 做完，我们就有了一个真实世界版的 obs 生成器。
+
+阶段 4：把阶段 1 + 3 拼起来：实时推理，但不控制 UR5
+
+目标： 连 UR5 + 相机 + 模型，每 0.1s 做一次：
+
+RTDE tcp → qpos → ACT.get_action → target qpos(14) → 取前6维当 target_tcp，
+只打印当前 TCP 和目标 TCP 的差值，不发控制命令。
+
+子功能：
+
+在阶段 3 的循环里，加上模型部分：
+
+policy = load_act_from_ckpt(...)
+
+while True:
+    tcp = get_current_tcp(...)
+    color = get_current_color(...)
+    qpos = build_qpos_from_tcp(tcp)
+    img = preprocess_image(color)
+
+    obs = {
+        "qpos": qpos,
+        "head_cam": img,
+        "left_cam": img,
+        "right_cam": img,
+    }
+    action = policy.get_action(obs)   # (1,14)
+    target_qpos = action[0]
+    target_tcp = target_qpos[:6]
+
+    delta = target_tcp - tcp
+    print("tcp:", tcp)
+    print("target_tcp:", target_tcp)
+    print("|delta|:", np.linalg.norm(delta))
+
+
+如何验证：
+
+能长期跑不报错；
+
+delta 的大小大致在一个“肉眼看上去合理”的范围，比如几毫米/几度，而不是突然飙到 0.5m / 3 rad。
+
+这一阶段是 实机推理但“只看不动”，最安全，也能帮你直觉理解模型学到的东西。
+
+阶段 5：加 UR 控制（第一版先用 socket），再考虑 RTDE 控制
+
+目标： 在阶段 4 的基础上，加一个非常保守的控制层：
+
+对 delta_tcp 加一个 per-step 的最大步长限制（比如 1–2mm、0.01rad）；
+
+用你现有的 socket 接口构造一个 movel(p[...]) 小步指令；
+
+真机放在空中、周围清空，做极小幅度缓慢运动。
+
+子功能：
+
+封装一个控制类（为以后 RTDE 控制做准备）：
+
+class URController:
+    def __init__(self, mode="socket"):
+        ...
+
+    def move_tcp_delta(self, delta_tcp):
+        # 限幅 + 发送 movel
+
+
+在阶段 4 的循环里替换打印逻辑：
+
+delta = target_tcp - tcp
+delta = clip_delta(delta, max_step=0.01)
+controller.move_tcp_delta(delta)
+
+
+如何验证：
+
+机器人每步移动非常小、非常稳，不会乱飞；
+
+你可以随时停掉脚本，机器人停住不动；
+
+确认 OK 后，再慢慢调大 max_step。
+
+至于 RTDE 控制：
+
+可以作为 阶段 6（独立小项目）：
+
+安装 ur_rtde 或使用当前 rtde 包的控制接口；
+
+把 URController 的内部实现从 socket 换成 RTDEControlInterface.servoL/servoJ；
+
+上层推理脚本不需要改，只是控制 backend 换了。
+
+###########################################################
+
+很好，这个 log 非常干净，说明我们现在有：
+
+* ✅ ACT 模型成功从
+  `/RoboTwin/policy/ACT/act_ckpt/act-torch_cube/simple-3/policy_best.ckpt` 里加载；
+* ✅ 成功读到 `dataset_stats.pkl`；
+* ✅ 成功从 episode0.hdf5 里解出一帧：
+
+  * `qpos_np shape = (14,)`（就是 left_arm 6 + left_gripper 1 + right_arm 6 + right_gripper 1）
+  * `image shape = (480, 640, 3)`
+* ✅ 前向输出 `a_hat.shape = [1, 50, 14]`，和训练时一致。
+
+也就是说：**“HDF5 → 归一化 → ACT 前向” 整条链路已经打通了**。🎉
+接下来就可以上 **Stage 3：RTDE + RealSense 在线前向（不控制机械臂）**。
+
+---
+
+## 下一步计划（Stage 3：在线推理但不发命令）
+
+我们先做一个「只读不控制」的脚本：
+
+* 每 0.1s：
+
+  1. 用 RTDE 读当前 `actual_TCP_pose`；
+  2. 和你在 `convert_2_hdf5_output_log.py` 里一模一样，把 TCP 堆成 14 维 qpos：
+     [
+     qpos = [tcp, 0, tcp, 0]
+     ]
+  3. 用 RealSense 读一帧彩色图；
+  4. 做和 Stage2 一样的归一化、拼 image tensor；
+  5. 喂给 ACT，打印一行输出（比如前 5 个关节的 action）；
+  6. 显示当前相机画面，按 `q` 退出。
+
+**这个阶段完全不发控制命令给机器人**，只做「感知 → 模型」，观察输出是否稳定、合理。
+
+---
+
+## 具体脚本（real_eval_stage3_online_no_ctrl.py）
+
+在 VSCode 里新建文件：
+
+`RoboTwin/policy/ACT/real_eval_stage3_online_no_ctrl.py`
+
+把下面整段代码粘进去，保存即可：
+
+```python
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+"""
+Stage 3: RTDE + RealSense 在线前向，但不控制机械臂
+- 每 1/CTRL_HZ 秒：
+  1) RTDE 读 actual_TCP_pose
+  2) 构造 qpos = [tcp, 0, tcp, 0] (14 维)
+  3) RealSense 读一帧彩色图
+  4) 归一化 + 打包成 tensor
+  5) 喂给 ACT，打印一行 action
+  6) 按 'q' 退出
+
+先验证「真机传感 → ACT」这条链路是否稳定。
+"""
+
+import os
+import time
+import pickle
+
+import numpy as np
+import cv2
+import torch
+
+# 复用 Stage1 里的加载函数和常量
+from real_eval_stage1_load_act import (
+    load_act_from_ckpt,
+    TASK_NAME,
+    TASK_CONFIG,
+    EXPERT_DATA_NUM,
+)
+
+# RTDE / RealSense 工具
+from rtde_collect_2_csv_func import connect_rtde
+from realsense_collect_2_folder_func import start_realsense_pipeline
+
+print("[DEBUG] real_eval_stage3_online_no_ctrl.py imported")
+
+# ========= 根据你的实际情况改一下 =========
+ROBOT_HOST = "192.168.0.3"
+ROBOT_PORT = 30004
+CTRL_HZ = 10.0          # 控制频率，和采集时尽量保持一致
+
+COLOR_WIDTH = 640
+COLOR_HEIGHT = 480
+COLOR_FPS = 30
+# =========================================
+
+
+def load_stats():
+    """
+    从 ckpt 目录读取 dataset_stats.pkl，
+    返回 stats, pre_process, post_process
+    """
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    ckpt_dir = os.path.join(
+        base_dir,
+        "act_ckpt",
+        f"act-{TASK_NAME}",
+        f"{TASK_CONFIG}-{EXPERT_DATA_NUM}",
+    )
+    stats_path = os.path.join(ckpt_dir, "dataset_stats.pkl")
+    print(f"[INFO] Loading stats from: {stats_path}")
+
+    with open(stats_path, "rb") as f:
+        stats = pickle.load(f)
+
+    def pre_process(qpos_np: np.ndarray) -> np.ndarray:
+        return (qpos_np - stats["qpos_mean"]) / stats["qpos_std"]
+
+    def post_process(action_np: np.ndarray) -> np.ndarray:
+        return action_np * stats["action_std"] + stats["action_mean"]
+
+    return stats, pre_process, post_process
+
+
+def build_qpos_from_tcp(tcp: np.ndarray) -> np.ndarray:
+    """
+    和 convert_2_hdf5_output_log.py 完全一致：
+        right_arm = tcp
+        left_arm = tcp
+        right_gripper = 0
+        left_gripper = 0
+
+    tcp: shape (6,)
+    返回: shape (14,)
+    """
+    tcp = tcp.astype(np.float32)
+    left_arm = tcp
+    right_arm = tcp
+    left_gripper = np.array([0.0], dtype=np.float32)
+    right_gripper = np.array([0.0], dtype=np.float32)
+    qpos = np.concatenate([left_arm, left_gripper, right_arm, right_gripper], axis=0)
+    return qpos
+
+
+def build_image_tensor(color_image, camera_names, device):
+    """
+    把一张 HxWx3 的图像复制成 len(camera_names) 路，
+    转成 (1, N_cam, 3, H, W) 的 float32 tensor。
+    """
+    H, W = 480, 640
+    img = cv2.resize(color_image, (W, H))
+    img = img.astype(np.float32) / 255.0
+
+    imgs = []
+    for _ in camera_names:
+        imgs.append(img)
+    imgs = np.stack(imgs, axis=0)               # (N_cam, H, W, 3)
+    imgs = np.transpose(imgs, (0, 3, 1, 2))     # (N_cam, 3, H, W)
+
+    image_tensor = torch.from_numpy(imgs).to(device).unsqueeze(0)   # (1, N_cam, 3, H, W)
+    return image_tensor
+
+
+def main():
+    # 1) 加载 ACT + stats
+    policy, camera_names, device = load_act_from_ckpt()
+    stats, pre_process, post_process = load_stats()
+
+    # 2) 建立 RTDE 连接 & 启动 RealSense
+    con = connect_rtde(
+        robot_host=ROBOT_HOST,
+        robot_port=ROBOT_PORT,
+        frequency_hz=CTRL_HZ,
+    )
+    pipeline = start_realsense_pipeline(
+        width=COLOR_WIDTH,
+        height=COLOR_HEIGHT,
+        fps=COLOR_FPS,
+    )
+
+    print("[REAL] Start online forward (no control). Press 'q' in window to stop.")
+
+    next_step_time = time.time()
+    step_idx = 0
+
+    try:
+        while True:
+            # 2.1 读 RTDE
+            state = con.receive()
+            if state is None:
+                print("[REAL] RTDE connection closed.")
+                break
+
+            tcp = np.array(state.actual_TCP_pose, dtype=np.float32)   # (6,)
+            qpos_np = build_qpos_from_tcp(tcp)                         # (14,)
+            qpos_norm = pre_process(qpos_np)
+            qpos_tensor = torch.from_numpy(qpos_norm).float().to(device).unsqueeze(0)  # (1, 14)
+
+            # 2.2 读相机
+            frames = pipeline.wait_for_frames()
+            color_frame = frames.get_color_frame()
+            if not color_frame:
+                continue
+            color_image = np.asanyarray(color_frame.get_data())
+            cv2.imshow("RealSense Color (ACT online)", color_image)
+
+            image_tensor = build_image_tensor(color_image, camera_names, device)
+
+            # 2.3 前向 ACT，取第 0 个 query 的 action
+            with torch.no_grad():
+                a_hat = policy(qpos_tensor, image_tensor)             # (1, 50, 14)
+                if isinstance(a_hat, torch.Tensor):
+                    raw_action = a_hat[0, 0].cpu().numpy()           # (14,)
+                else:
+                    raw_action = a_hat[0][0].cpu().numpy()
+
+            action_real = post_process(raw_action)                    # 反归一化后的 14 维
+
+            # 只打印前几维，避免刷屏
+            print(
+                f"[STEP {step_idx:04d}] tcp[0:3]={tcp[:3]}, "
+                f"action_real[0:5]={action_real[:5]}"
+            )
+            step_idx += 1
+
+            # 2.4 维持 CTRL_HZ
+            next_step_time += 1.0 / CTRL_HZ
+            sleep_t = next_step_time - time.time()
+            if sleep_t > 0:
+                time.sleep(sleep_t)
+
+            # 2.5 按 'q' 退出
+            key = cv2.waitKey(1) & 0xFF
+            if key == ord("q"):
+                print("[REAL] Quit by user.")
+                break
+
+    finally:
+        try:
+            con.send_pause()
+        except Exception:
+            pass
+        con.disconnect()
+        pipeline.stop()
+        cv2.destroyAllWindows()
+        print("[REAL] Online forward finished, connections closed.")
+
+
+if __name__ == "__main__":
+    main()
+```
+
+---
+
+## 使用方式
+
+在终端（你现在这个环境）：
+
+```bash
+cd ~/UR5e_DataCollection
+python RoboTwin/policy/ACT/real_eval_stage3_online_no_ctrl.py
+```
+
+前提：
+
+* 机械臂控制箱开机，IP 为脚本里的 `ROBOT_HOST`（如果不对，改成实际 IP）；
+* Polyscope 切到 **Remote Control**；
+* RealSense 插上，能正常用 `realsense-viewer` 看到画面。
+
+运行后你应该看到：
+
+* 终端里不断打印：
+
+  ```text
+  [STEP 0000] tcp[0:3]=[...] action_real[0:5]=[...]
+  [STEP 0001] ...
+  ...
+  ```
+
+* 屏幕上弹一个 RealSense 的窗口，实时画面，按 `q` 退出。
+
+---
+
+### 一旦这个脚本稳定运行
+
+我们就只剩最后一步：
+
+* 在这个脚本的基础上，在 `print` 那一行下面接一个简单的 **UR 控制接口**（比如把 action 前 6 维变成一个小步长的 TCP delta，用 `movel` 或 RTDE 的速度控制方式发给机器人）。
+
+那就是 Stage 4，我们可以等你确认 Stage 3 跑顺了再一起改。
+
+
+

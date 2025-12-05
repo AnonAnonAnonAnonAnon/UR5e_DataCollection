@@ -54,6 +54,13 @@ class DETRVAE(nn.Module):
         hidden_dim = transformer.d_model
         self.action_head = nn.Linear(hidden_dim, state_dim)
         self.is_pad_head = nn.Linear(hidden_dim, 1)
+        
+        # ---- 这里是我们加的保险逻辑(cyt) ----
+        if isinstance(num_queries, (tuple, list)):
+            print("[WARN] num_queries is tuple, take first element:", num_queries)
+            num_queries = num_queries[0]
+        # ---- 保险逻辑结束 ----       
+        
         self.query_embed = nn.Embedding(num_queries, hidden_dim)
         if backbones is not None:
             self.input_proj = nn.Conv2d(backbones[0].num_channels, hidden_dim, kernel_size=1)

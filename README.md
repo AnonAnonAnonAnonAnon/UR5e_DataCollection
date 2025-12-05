@@ -203,7 +203,20 @@ bash train.sh torch_cube simple 3 0 0
 
 ### (10) Inference
 
+Verify whether ACT can perform forward reasoning:
 
+```bash
+python /home/zhangw/UR5e_DataCollection/RoboTwin/policy/ACT/real_eval_stage1_load_act.py
+```
+
+Verify whether ACT can perform forward inference on real data:
+
+```bash
+python /home/zhangw/UR5e_DataCollection/RoboTwin/policy/ACT/real_eval_stage2_hdf5_forward.py
+```
+
+后面还有几个阶段
+https://chatgpt.com/g/g-p-691afad7a7e48191afa68138ee44f88b/c/6932af9a-f698-8324-ac93-d10e05dd8d80
 
 ### TODO
 
@@ -214,10 +227,7 @@ bash train.sh torch_cube simple 3 0 0
 
 ai插件更新
 
-规划实现
-https://mcneznd3g628.feishu.cn/wiki/ITixw3WjMiX4fakEbEPchoMtnXc?from=from_copylink
-
-考古sy实现api
+lerobot框架？
 
 
 
