@@ -203,29 +203,33 @@ bash train.sh torch_cube simple 3 0 0
 
 ### (10) Inference
 
-Verify whether ACT can perform forward reasoning:
+Some preliminary phased test scripts: 
 
 ```bash
 python /home/zhangw/UR5e_DataCollection/RoboTwin/policy/ACT/real_eval_stage1_load_act.py
+python /home/zhangw/UR5e_DataCollection/RoboTwin/policy/ACT/real_eval_stage2_hdf5_forward.py
+python /home/zhangw/UR5e_DataCollection/RoboTwin/policy/ACT/real_eval_stage3_online_no_ctrl.py
 ```
 
-Verify whether ACT can perform forward inference on real data:
+First, return the robotic arm to its initial position:
 
 ```bash
-python /home/zhangw/UR5e_DataCollection/RoboTwin/policy/ACT/real_eval_stage2_hdf5_forward.py
+python /home/zhangw/UR5e_DataCollection/go_home.py
 ```
 
-后面还有几个阶段
-https://chatgpt.com/g/g-p-691afad7a7e48191afa68138ee44f88b/c/6932af9a-f698-8324-ac93-d10e05dd8d80
+Performing inference on a real UR5e: 
+
+```bash
+python /home/zhangw/UR5e_DataCollection/RoboTwin/policy/ACT/real_eval.py
+```
 
 ### TODO
 
-写简单实机评估脚本
-/home/zhangw/UR5e_DataCollection/12012009_cache_gpt_chat.txt
+效果：更多数据；第3人称相机视角低，自由驱动收集；域随机化
 
-训练; 核桃gpu？
+训练：核桃gpu？；240gpu
 
-ai插件更新
+更多：推理时可被自由驱动？；rtde读写；平滑
 
 lerobot框架？
 
