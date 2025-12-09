@@ -225,13 +225,13 @@ python /home/zhangw/UR5e_DataCollection/RoboTwin/policy/ACT/real_eval.py
 
 ### TODO
 
-效果：更多数据；第3人称相机视角低，自由驱动收集；域随机化
+控制：rtde读写，平滑，推理时自由驱动
 
-训练：核桃gpu？；240gpu
+数据：数量，夹爪，头部相机，随机化，vr
 
-更多：推理时可被自由驱动？；rtde读写；平滑
+训练：核桃，240(登录问题)
 
-lerobot框架？
+更多：模型(rt2)，lerobot框架
 
 
 
