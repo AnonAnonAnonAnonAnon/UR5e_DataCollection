@@ -225,9 +225,11 @@ python /home/zhangw/UR5e_DataCollection/RoboTwin/policy/ACT/real_eval.py
 
 ### TODO
 
+双相机，调度
+
 控制：rtde读写，平滑，推理时自由驱动
 
-数据：数量，夹爪，头部相机，随机化，vr
+数据：数量，夹爪，随机化，vr
 
 训练：核桃，240(登录问题)
 
