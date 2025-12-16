@@ -67,7 +67,19 @@ Press s to take a screenshot
 Press q to quit
 
 ```bash
-realsense_test.py
+python realsense_test.py
+```
+
+A demo for any dual camera setup:
+
+```bash
+python realsense_dual_test.py
+```
+
+A demo for defining head and wrist cameras:
+
+```bash
+python realsense_dual_head_wrist.py
 ```
 
 ### (4) RTDE install
@@ -117,11 +129,19 @@ Basic implementation that saves images to a folder at a certain frequency:
 python realsense_collect_2_folder.py
 ```
 
+Dual camera ver.:
+
+```bash
+python realsense_dual_collect_2_folder.py
+```
+
 ### (6) Simultaneous collect action and camera data 
 
-Encapsulated the functions of rtde_collect_2_csv.py and realsense_collect_2_folder.py into functions
+Encapsulated the functions of rtde_collect_2_csv.py and realsense_collect_2_folder.py and realsense_dual_collect_2_folder.py into functions
 
 realsense_collect_2_folder_func.py
+
+realsense_dual_collect_2_folder_func.py
 
 rtde_collect_2_csv_func.py
 
@@ -132,6 +152,14 @@ python collect_data_action_camera.py
 ```
 
 10hz
+
+Dual camera ver.:
+
+```bash
+python collect_data_action_dual_camera.py
+```
+
+Note: Polyscope remote mode
 
 ### (7) Convert to HDF5 format
 
@@ -225,7 +253,7 @@ python /home/zhangw/UR5e_DataCollection/RoboTwin/policy/ACT/real_eval.py
 
 ### TODO
 
-双相机，调度
+双相机: 转hdf5
 
 控制：rtde读写，平滑，推理时自由驱动
 
