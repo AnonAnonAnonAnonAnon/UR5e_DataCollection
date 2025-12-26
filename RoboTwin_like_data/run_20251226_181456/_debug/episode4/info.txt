@@ -1,0 +1,4 @@
+T_raw_tcp   = 120
+T_raw_head  = 120
+T_raw_wrist = 120
+T_used      = 120

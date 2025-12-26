@@ -1,0 +1,4 @@
+T_raw_tcp   = 67
+T_raw_head  = 67
+T_raw_wrist = 67
+T_used      = 67

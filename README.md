@@ -145,7 +145,13 @@ realsense_dual_collect_2_folder_func.py
 
 rtde_collect_2_csv_func.py
 
-Call the encapsulated function to simultaneously collect action data and camera footage at a fixed frequency:
+Initial pose for data collection and reasoning, go home script (Polyscope remote mode):
+
+```bash
+go_home.py
+```
+
+Call the encapsulated function to simultaneously collect action data and camera footage at a fixed frequency (Polyscope local mode):
 
 ```bash
 python collect_data_action_camera.py
@@ -159,7 +165,13 @@ Dual camera ver.:
 python collect_data_action_dual_camera.py
 ```
 
-Note: Polyscope remote mode
+The collected raw data is temporarily stored in:
+
+UR5e_DataCollection/action_data
+
+UR5e_DataCollection/camera_data
+
+(LOG:12261816 collect 10 data)
 
 ### (7) Convert to HDF5 format
 
@@ -171,17 +183,18 @@ In RoboTwin 2.0, each policy has a script that processes data in HDF5 format int
 
 UR5e_DataCollection/RoboTwin/policy/ACT/process_data.py
 
-Determine the initial pose for data collection and reasoning, go home script:
-
-```bash
-go_home.py
-```
-
 Convert all existing data in folder to HDF5:
 
 ```bash
 python convert_2_hdf5_output_log.py
 ```
+Convert all existing data in folder to HDF5 (dual camera ver):
+
+```bash
+python convert_2_hdf5_output_log_dual.py
+```
+
+(LOG:12261816 Convert 10 data to hdf5)
 
 The converted HDF5, for example:
 
@@ -202,11 +215,20 @@ Modify the data processing script for each strategy, using ACT as an example
 ```bash
 cd /home/zhangw/UR5e_DataCollection/RoboTwin/policy/ACT
 python process_data_real.py \
-  /home/zhangw/UR5e_DataCollection/RoboTwin_like_data/run_20251201_193912 \
+  /home/zhangw/UR5e_DataCollection/RoboTwin_like_data/run_20251226_181456 \
   torch_cube \
   simple \
-  3
+  10
 ```
+
+The converted data (ACT), for example:
+
+```bash
+UR5e_DataCollection/RoboTwin/policy/ACT/processed_data/sim-torch_cube/simple-10
+```
+
+(LOG:12261816 Convert 10 data to ACT)
+
 
 ### (9) Train
 
@@ -253,9 +275,9 @@ python /home/zhangw/UR5e_DataCollection/RoboTwin/policy/ACT/real_eval.py
 
 ### TODO
 
-双相机: 转hdf5
+双相机: 训练
 
-控制：rtde读写，平滑，推理时自由驱动
+控制：rtde读写，平滑，推理时自由驱动，收集时python命令自由驱动
 
 数据：数量，夹爪，随机化，vr
 

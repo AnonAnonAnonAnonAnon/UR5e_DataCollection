@@ -18,5 +18,15 @@
             "cam_right_wrist",
             "cam_left_wrist"
         ]
+    },
+    "sim-torch_cube-simple-10": {
+        "dataset_dir": "./processed_data/sim-torch_cube/simple-10",
+        "num_episodes": 10,
+        "episode_len": 1000,
+        "camera_names": [
+            "cam_high",
+            "cam_right_wrist",
+            "cam_left_wrist"
+        ]
     }
 }

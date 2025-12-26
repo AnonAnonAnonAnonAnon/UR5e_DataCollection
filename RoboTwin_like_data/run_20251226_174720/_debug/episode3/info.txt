@@ -1,0 +1,4 @@
+T_raw_tcp   = 11
+T_raw_head  = 11
+T_raw_wrist = 11
+T_used      = 11
