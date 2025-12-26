@@ -284,6 +284,7 @@ python /home/zhangw/UR5e_DataCollection/RoboTwin/policy/ACT/real_eval.py
 训练：核桃，240(登录问题)
 
 更多：模型(rt2)，lerobot框架
+https://huggingface.co/docs/lerobot/en/index
 
 
 
