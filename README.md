@@ -10,6 +10,8 @@ Conda environment based on RoboTwin 2.0 environment
 
 ### (1) UR5e Connection and Basic Control 
 
+#### (1.1) Simplest
+
 The simplest UR5e control script, only the robotic arm, without the gripper
 
 ```bash
@@ -17,13 +19,31 @@ pip install keyboard
 pip install pyserial
 ```
 
-Check the network connection with the robotic arm: ping 192.168.0.3
+Check the network connection with the robotic arm: 
+
+```bash
+ping 192.168.0.3
+```
 
 Switch Polyscope to remote control
 
 ```bash
 python ur5e_test_mini_clean.py
 ```
+
+#### (1.2) Freedrive
+
+Entering free drive mode for a period of time:
+
+```bash
+python freedrive_socket.py
+```
+
+Note: This must be done under Remote Control; the robot cannot execute trajectory commands (such as movej) in Freedrive mode.
+
+Future: More convenient hardware implementation:
+
+https://www.universal-robots.com/articles/ur/interface-communication/external-freedrive-button/
 
 ### （2）Camera-related component installation
 
@@ -82,7 +102,10 @@ A demo for defining head and wrist cameras:
 python realsense_dual_head_wrist.py
 ```
 
-### (4) RTDE install
+### (4) RTDE 
+
+### (4.1) install
+
 
 RTDE Project: 
 https://github.com/UniversalRobots/RTDE_Python_Client_Library
@@ -99,17 +122,28 @@ pip install rtde-2.7.12-release.zip
 pip install numpy
 pip install matplotlib
 ```
-
-Servoj_RTDE_UR5 Project: Provides smoother control
-
-Download Folder: 
-https://github.com/danielstankw/Servoj_RTDE_UR5
+### (4.2) Read
 
 RTDE basic test: output TCP pose per second:
 
 ```bash
 python rtde_init_test.py
 ```
+
+### (4.3) Write
+
+Switch Polyscope to local mode, first run URP, then run the Python script:
+
+```bash
+python rtde_control_min.py
+```
+
+Future：
+
+Servoj_RTDE_UR5 Project: Provides smoother control
+
+Download Folder: 
+https://github.com/danielstankw/Servoj_RTDE_UR5
 
 ### (5) Collect action and camera data separately
 
@@ -247,7 +281,7 @@ Start Training:
 
 ```bash
 cd /home/zhangw/UR5e_DataCollection/RoboTwin/policy/ACT
-bash train.sh torch_cube simple 3 0 0
+bash train.sh torch_cube simple 10 0 0
 #            ^task_name  ^task_config  ^expert_data_num  ^seed  ^gpu_id
 ```
 
@@ -267,24 +301,26 @@ First, return the robotic arm to its initial position:
 python /home/zhangw/UR5e_DataCollection/go_home.py
 ```
 
-Performing inference on a real UR5e: 
+Performing inference on a real UR5e (Remote Control): 
 
 ```bash
 python /home/zhangw/UR5e_DataCollection/RoboTwin/policy/ACT/real_eval.py
 ```
 
+(First, adjust the task, settings, and data nums in: real_eval_stage1_load_act.py)
+
 ### TODO
 
-双相机: 训练
+控制：rtde读写，平滑
 
-控制：rtde读写，平滑，推理时自由驱动，收集时python命令自由驱动
+数据：数量，夹爪，随机化，vr，自由驱动集成
 
-数据：数量，夹爪，随机化，vr
+训练：lora, 240, 核桃
 
-训练：核桃，240(登录问题)
+更多模型: RoboTwin 2.0
 
-更多：模型(rt2)，lerobot框架
-https://huggingface.co/docs/lerobot/en/index
-
+Lerobot框架: https://huggingface.co/docs/lerobot/en/index
+适配，或者参考功能，或者复用脚本
+https://huggingface.co/docs/lerobot/en/hilserl
 
 
